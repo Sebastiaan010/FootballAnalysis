@@ -1,0 +1,15 @@
+# Dependencies
+node_modules/
+
+# Environment variabelen (NOOIT committen!)
+.env
+
+# Build output
+dist/
+
+# OS bestanden
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
