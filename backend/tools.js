@@ -1,15 +1,5 @@
 const BASE_URL = "https://api.football-data.org/v4";
 
-// Competitie codes voor de meest gebruikte competities
-export const COMPETITIONS = {
-    "premier league": "PL",
-    "eredivisie": "DED",
-    "champions league": "CL",
-    "la liga": "PD",
-    "bundesliga": "BL1",
-    "serie a": "SA",
-    "ligue 1": "FL1",
-};
 
 async function footballFetch(endpoint) {
     const response = await fetch(`${BASE_URL}${endpoint}`, {
@@ -18,7 +8,7 @@ async function footballFetch(endpoint) {
         },
     });
 
-    // Rate limit check zoals Daniel aanbeveelt
+    // Rate limit check zoals de API aanbeveelt
     const remaining = response.headers.get("X-Requests-Available-Minute");
     if (remaining && parseInt(remaining) < 3) {
         console.warn(`[rate-limit] Nog maar ${remaining} requests beschikbaar deze minuut`);
@@ -77,20 +67,3 @@ export async function getUpcomingMatches(teamId, limit = 5) {
         uit: m.awayTeam.name,
     }));
 }
-
-// Team ID lookup voor bekende clubs (vrij te breiden)
-export const TEAM_IDS = {
-    "liverpool": 64,
-    "manchester city": 65,
-    "arsenal": 57,
-    "chelsea": 61,
-    "manchester united": 66,
-    "ajax": 678,
-    "psv": 674,
-    "feyenoord": 675,
-    "barcelona": 81,
-    "real madrid": 86,
-    "atletico madrid": 78,
-    "bayern münchen": 5,
-    "borussia dortmund": 4,
-};

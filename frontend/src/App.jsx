@@ -5,19 +5,27 @@ const TOOL_LABELS = {
     getStandings: "📊 Stand ophalen",
     getRecentMatches: "📋 Recente wedstrijden ophalen",
     getUpcomingMatches: "📅 Aankomende wedstrijden ophalen",
+    searchDocuments: "📖 Tactische documenten raadplegen",
+};
+
+const SOURCE_LABELS = {
+    "pressing.txt": "Pressing & Gegenpressing",
+    "formations.txt": "Formaties & Systemen",
+    "coaches.txt": "Coaches & Filosofieën",
 };
 
 export default function App() {
     const [messages, setMessages] = useState([
         {
             role: "assistant",
-            content: "Welke wedstrijd of tactiek wil je analyseren? Ik kan ook live standen en uitslagen opzoeken.",
+            content: "Welke wedstrijd of tactiek wil je analyseren? Ik kan live standen opzoeken én tactische documenten raadplegen.",
         },
     ]);
     const [input, setInput] = useState("");
     const [loading, setLoading] = useState(false);
     const [totalTokens, setTotalTokens] = useState(0);
     const [statusLabel, setStatusLabel] = useState("");
+    const [lastSources, setLastSources] = useState([]);
     const bottomRef = useRef(null);
 
     useEffect(() => {
@@ -32,6 +40,7 @@ export default function App() {
         setInput("");
         setLoading(true);
         setStatusLabel("");
+        setLastSources([]);
 
         setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
@@ -55,12 +64,11 @@ export default function App() {
                 for (const line of lines) {
                     const json = JSON.parse(line.replace("data: ", ""));
 
-                    if (json.status) {
-                        setStatusLabel(json.status);
-                    }
+                    if (json.status) setStatusLabel(json.status);
 
                     if (json.toolUsed) {
                         setStatusLabel(TOOL_LABELS[json.toolUsed] ?? json.toolUsed);
+                        if (json.sources) setLastSources(json.sources);
                     }
 
                     if (json.token) {
@@ -75,9 +83,7 @@ export default function App() {
                         });
                     }
 
-                    if (json.done) {
-                        setTotalTokens(json.totalTokens);
-                    }
+                    if (json.done) setTotalTokens(json.totalTokens);
                 }
             }
         } catch (err) {
@@ -97,13 +103,12 @@ export default function App() {
 
     async function resetChat() {
         await fetch("/api/reset", { method: "POST" });
-        setMessages([
-            {
-                role: "assistant",
-                content: "Welke wedstrijd of tactiek wil je analyseren? Ik kan ook live standen en uitslagen opzoeken.",
-            },
-        ]);
+        setMessages([{
+            role: "assistant",
+            content: "Welke wedstrijd of tactiek wil je analyseren? Ik kan live standen opzoeken én tactische documenten raadplegen.",
+        }]);
         setTotalTokens(0);
+        setLastSources([]);
     }
 
     function handleKeyDown(e) {
@@ -155,6 +160,17 @@ export default function App() {
                     </div>
                 )}
 
+                {lastSources.length > 0 && !loading && (
+                    <div className="sources">
+                        <span className="sources-label">Bronnen:</span>
+                        {lastSources.map((src) => (
+                            <span key={src} className="source-badge">
+                                📄 {SOURCE_LABELS[src] ?? src}
+                            </span>
+                        ))}
+                    </div>
+                )}
+
                 <div ref={bottomRef} />
             </main>
 
@@ -163,7 +179,7 @@ export default function App() {
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={handleKeyDown}
-                    placeholder="Vraag naar tactiek, standen, of uitslagen..."
+                    placeholder="Vraag naar tactiek, standen, coaches of formaties..."
                     rows={2}
                     disabled={loading}
                 />

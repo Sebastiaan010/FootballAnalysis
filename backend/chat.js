@@ -3,7 +3,8 @@ import { AzureChatOpenAI } from "@langchain/openai";
 import { HumanMessage, SystemMessage, AIMessage, ToolMessage } from "@langchain/core/messages";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
-import { getStandings, getRecentMatches, getUpcomingMatches, COMPETITIONS, TEAM_IDS } from "./tools.js";
+import { getStandings, getRecentMatches, getUpcomingMatches } from "./tools.js";
+import { searchDocuments } from "./embeddings.js";
 
 const llm = new AzureChatOpenAI({
     temperature: 0.7,
@@ -14,27 +15,32 @@ const SYSTEM_PROMPT = `Je bent "De Analist" — een gepassioneerde voetbaltactie
 
 Je doelgroep zijn fanatieke voetbalfans (16-35 jaar) die al weten wat een 4-3-3 is, pressing begrijpen en houden van tactische diepgang. Leg nooit basisregels uit.
 
-Je hebt toegang tot live voetbaldata via tools. Gebruik ze proactief:
-- Vraagt iemand naar de stand? → gebruik getStandings
-- Vraagt iemand hoe een team het heeft gedaan? → gebruik getRecentMatches
-- Vraagt iemand naar aankomende wedstrijden? → gebruik getUpcomingMatches
+Je hebt toegang tot twee soorten tools:
+
+LIVE DATA TOOLS (gebruik voor actuele informatie):
+- getStandings: actuele stand van een competitie
+- getRecentMatches: recente wedstrijden van een team
+- getUpcomingMatches: aankomende wedstrijden van een team
+
+DOCUMENT SEARCH TOOL (gebruik voor tactische kennis):
+- searchDocuments: zoek in tactische documenten over pressing, formaties en coaches
 
 Beschikbare competitiecodes: PL (Premier League), DED (Eredivisie), CL (Champions League), PD (La Liga), BL1 (Bundesliga), SA (Serie A), FL1 (Ligue 1)
 Beschikbare team IDs: liverpool=64, manchester city=65, arsenal=57, chelsea=61, manchester united=66, ajax=678, psv=674, feyenoord=675, barcelona=81, real madrid=86, atletico madrid=78, bayern münchen=5, borussia dortmund=4
 
 Jouw stijl:
 - Enthousiast, direct en opinionated — jij hebt een mening en verdedigt die
-- Combineer data met tactische analyse — cijfers alleen zijn saai
-- Stel tegenvragen als je meer context nodig hebt
+- Combineer documentkennis met live data voor complete antwoorden
 - Gebruik voetbaljargon: pressing lines, half-spaces, balbezit, counterpressing
 - Korte alinea's, geen opsommingslijsten tenzij het echt helpt
+- Vermeld altijd de bron als je info uit een document haalt (bijv. "Volgens mijn tactisch document over pressing...")
 
 Beperkingen:
 - Geen blessure-diagnoses of medisch advies
 - Geen wedtips of gokadvies
 - Voor live scores: verwijs naar FlashScore of SofaScore`;
 
-// Tool definities voor LangChain
+// Tool definities
 const standingsTool = tool(
     async ({ competitionCode }) => {
         try {
@@ -46,7 +52,7 @@ const standingsTool = tool(
     },
     {
         name: "getStandings",
-        description: "Haal de actuele stand op van een voetbalcompetitie. Gebruik competitiecodes zoals PL, DED, CL, PD, BL1, SA, FL1.",
+        description: "Haal de actuele stand op van een voetbalcompetitie.",
         schema: z.object({
             competitionCode: z.string().describe("De competitiecode, bijv. PL voor Premier League"),
         }),
@@ -64,7 +70,7 @@ const recentMatchesTool = tool(
     },
     {
         name: "getRecentMatches",
-        description: "Haal recente gespeelde wedstrijden op van een team op basis van team ID.",
+        description: "Haal recente gespeelde wedstrijden op van een team.",
         schema: z.object({
             teamId: z.number().describe("Het team ID, bijv. 64 voor Liverpool"),
             limit: z.number().optional().describe("Aantal wedstrijden, standaard 5"),
@@ -83,7 +89,7 @@ const upcomingMatchesTool = tool(
     },
     {
         name: "getUpcomingMatches",
-        description: "Haal aankomende geplande wedstrijden op van een team op basis van team ID.",
+        description: "Haal aankomende geplande wedstrijden op van een team.",
         schema: z.object({
             teamId: z.number().describe("Het team ID, bijv. 678 voor Ajax"),
             limit: z.number().optional().describe("Aantal wedstrijden, standaard 5"),
@@ -91,11 +97,35 @@ const upcomingMatchesTool = tool(
     }
 );
 
-const tools = [standingsTool, recentMatchesTool, upcomingMatchesTool];
+const searchDocumentsTool = tool(
+    async ({ query }) => {
+        try {
+            const results = await searchDocuments(query, 3);
+            // Stuur zowel inhoud als bron terug naar de AI
+            return JSON.stringify(results.map(r => ({
+                bron: r.source,
+                inhoud: r.content,
+            })));
+        } catch (e) {
+            return `Fout bij zoeken in documenten: ${e.message}`;
+        }
+    },
+    {
+        name: "searchDocuments",
+        description: "Zoek in tactische kennisdocumenten over pressing, formaties en coaches. Gebruik dit voor vragen over tactiek, speelstijlen, coaches en formaties.",
+        schema: z.object({
+            query: z.string().describe("De zoekterm, bijv. 'gegenpressing Klopp' of '4-3-3 voordelen'"),
+        }),
+    }
+);
+
+const tools = [standingsTool, recentMatchesTool, upcomingMatchesTool, searchDocumentsTool];
 const llmWithTools = llm.bindTools(tools);
 
 let chatHistory = [];
 let totalTokensUsed = 0;
+
+
 
 export async function chatStream(userMessage, res) {
     chatHistory.push(new HumanMessage(userMessage));
@@ -111,13 +141,10 @@ export async function chatStream(userMessage, res) {
 
     let fullResponse = "";
 
-    // Stap 1: vraag de AI of hij tools wil aanroepen
     const initialResponse = await llmWithTools.invoke(messages);
 
-    // Stap 2: als de AI een tool wil aanroepen, voer die dan uit
     if (initialResponse.tool_calls && initialResponse.tool_calls.length > 0) {
-        // Laat de frontend weten dat we data ophalen
-        res.write(`data: ${JSON.stringify({ status: "Live data ophalen..." })}\n\n`);
+        res.write(`data: ${JSON.stringify({ status: "Data ophalen..." })}\n\n`);
 
         const toolResults = [];
 
@@ -128,17 +155,28 @@ export async function chatStream(userMessage, res) {
             if (toolCall.name === "getStandings") result = await standingsTool.invoke(toolCall.args);
             else if (toolCall.name === "getRecentMatches") result = await recentMatchesTool.invoke(toolCall.args);
             else if (toolCall.name === "getUpcomingMatches") result = await upcomingMatchesTool.invoke(toolCall.args);
+            else if (toolCall.name === "searchDocuments") result = await searchDocumentsTool.invoke(toolCall.args);
 
             toolResults.push(new ToolMessage({
                 content: result,
                 tool_call_id: toolCall.id,
             }));
 
-            // Stuur tool naam naar frontend voor transparantie
-            res.write(`data: ${JSON.stringify({ toolUsed: toolCall.name })}\n\n`);
+            // Stuur tool naam EN bron naar frontend
+            const toolInfo = { toolUsed: toolCall.name };
+
+            // Als het een document search is, stuur ook de bestandsnamen mee
+            if (toolCall.name === "searchDocuments") {
+                try {
+                    const parsed = JSON.parse(result);
+                    const sources = [...new Set(parsed.map(r => r.bron))];
+                    toolInfo.sources = sources;
+                } catch {}
+            }
+
+            res.write(`data: ${JSON.stringify(toolInfo)}\n\n`);
         }
 
-        // Stap 3: stuur de tool resultaten terug naar de AI voor het echte antwoord
         const messagesWithTools = [
             new SystemMessage(SYSTEM_PROMPT),
             ...chatHistory,
@@ -161,7 +199,6 @@ export async function chatStream(userMessage, res) {
         }
 
     } else {
-        // Geen tool nodig — gewoon streamen
         const stream = await llm.stream(messages);
 
         for await (const chunk of stream) {
