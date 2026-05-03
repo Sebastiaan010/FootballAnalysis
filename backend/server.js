@@ -7,7 +7,6 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// POST /api/chat — stuurt de response als stream terug
 app.post("/api/chat", async (req, res) => {
     const { message } = req.body;
 
@@ -26,7 +25,7 @@ app.post("/api/reset", (req, res) => {
     res.json({ success: true });
 });
 
-// GET /api/stats — token usage en berichtentelling
+// GET /api/stats — token usage 
 app.get("/api/stats", (req, res) => {
     res.json(getStats());
 });

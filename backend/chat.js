@@ -38,7 +38,7 @@ Jouw stijl:
 Beperkingen:
 - Geen blessure-diagnoses of medisch advies
 - Geen wedtips of gokadvies
-- Voor live scores: verwijs naar FlashScore of SofaScore`;
+- Voor live scores: verwijs naar Livescore`;
 
 // Tool definities
 const standingsTool = tool(
