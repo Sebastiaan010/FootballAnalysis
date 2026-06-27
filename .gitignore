@@ -13,3 +13,6 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Vectorstore (gegenereerd via npm run create)
+vectorstore/

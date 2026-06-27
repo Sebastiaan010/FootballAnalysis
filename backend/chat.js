@@ -18,9 +18,9 @@ Je doelgroep zijn fanatieke voetbalfans (16-35 jaar) die al weten wat een 4-3-3 
 Je hebt toegang tot twee soorten tools:
 
 LIVE DATA TOOLS (gebruik voor actuele informatie):
-- getStandings: actuele stand van een competitie
-- getRecentMatches: recente wedstrijden van een team
-- getUpcomingMatches: aankomende wedstrijden van een team
+- getStandings: actuele stand van een competitie. De data wordt automatisch als tabel getoond aan de gebruiker, je hoeft de stand dus NIET als tekst op te sommen. Geef een korte tactische analyse bij de stand.
+- getRecentMatches: recente wedstrijden van een team. De data wordt automatisch als tabel getoond, je hoeft de scores NIET op te sommen. Geef een korte analyse.
+- getUpcomingMatches: aankomende wedstrijden van een team. De data wordt automatisch als tabel getoond.
 
 DOCUMENT SEARCH TOOL (gebruik voor tactische kennis):
 - searchDocuments: zoek in tactische documenten over pressing, formaties en coaches
@@ -33,14 +33,13 @@ Jouw stijl:
 - Combineer documentkennis met live data voor complete antwoorden
 - Gebruik voetbaljargon: pressing lines, half-spaces, balbezit, counterpressing
 - Korte alinea's, geen opsommingslijsten tenzij het echt helpt
-- Vermeld altijd de bron als je info uit een document haalt (bijv. "Volgens mijn tactisch document over pressing...")
+- Vermeld altijd de bron als je info uit een document haalt
 
 Beperkingen:
 - Geen blessure-diagnoses of medisch advies
 - Geen wedtips of gokadvies
 - Voor live scores: verwijs naar Livescore`;
 
-// Tool definities
 const standingsTool = tool(
     async ({ competitionCode }) => {
         try {
@@ -101,7 +100,6 @@ const searchDocumentsTool = tool(
     async ({ query }) => {
         try {
             const results = await searchDocuments(query, 3);
-            // Stuur zowel inhoud als bron terug naar de AI
             return JSON.stringify(results.map(r => ({
                 bron: r.source,
                 inhoud: r.content,
@@ -112,7 +110,7 @@ const searchDocumentsTool = tool(
     },
     {
         name: "searchDocuments",
-        description: "Zoek in tactische kennisdocumenten over pressing, formaties en coaches. Gebruik dit voor vragen over tactiek, speelstijlen, coaches en formaties.",
+        description: "Zoek in tactische kennisdocumenten over pressing, formaties en coaches.",
         schema: z.object({
             query: z.string().describe("De zoekterm, bijv. 'gegenpressing Klopp' of '4-3-3 voordelen'"),
         }),
@@ -124,8 +122,6 @@ const llmWithTools = llm.bindTools(tools);
 
 let chatHistory = [];
 let totalTokensUsed = 0;
-
-
 
 export async function chatStream(userMessage, res) {
     chatHistory.push(new HumanMessage(userMessage));
@@ -162,10 +158,18 @@ export async function chatStream(userMessage, res) {
                 tool_call_id: toolCall.id,
             }));
 
-            // Stuur tool naam EN bron naar frontend
             const toolInfo = { toolUsed: toolCall.name };
 
-            // Als het een document search is, stuur ook de bestandsnamen mee
+            // Stuur ruwe tabeldata mee voor standings en matches
+            if (["getStandings", "getRecentMatches", "getUpcomingMatches"].includes(toolCall.name)) {
+                try {
+                    toolInfo.tableData = {
+                        type: toolCall.name,
+                        rows: JSON.parse(result),
+                    };
+                } catch {}
+            }
+
             if (toolCall.name === "searchDocuments") {
                 try {
                     const parsed = JSON.parse(result);

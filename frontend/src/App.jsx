@@ -14,6 +14,70 @@ const SOURCE_LABELS = {
     "coaches.txt": "Coaches & Filosofieën",
 };
 
+function StandingsTable({ rows }) {
+    return (
+        <div className="data-table-wrapper">
+            <table className="data-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Team</th>
+                        <th>G</th>
+                        <th>W</th>
+                        <th>G</th>
+                        <th>V</th>
+                        <th>DS</th>
+                        <th>Pnt</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows.map((row, i) => (
+                        <tr key={i}>
+                            <td>{row.positie}</td>
+                            <td className="team-name">{row.team}</td>
+                            <td>{row.gespeeld}</td>
+                            <td>{row.gewonnen}</td>
+                            <td>{row.gelijk}</td>
+                            <td>{row.verloren}</td>
+                            <td>{row.doelpuntensaldo > 0 ? `+${row.doelpuntensaldo}` : row.doelpuntensaldo}</td>
+                            <td><strong>{row.punten}</strong></td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    );
+}
+
+function MatchesTable({ rows }) {
+    return (
+        <div className="data-table-wrapper">
+            <table className="data-table">
+                <thead>
+                    <tr>
+                        <th>Datum</th>
+                        <th>Competitie</th>
+                        <th>Thuis</th>
+                        <th>Score</th>
+                        <th>Uit</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows.map((row, i) => (
+                        <tr key={i}>
+                            <td>{row.datum}</td>
+                            <td>{row.competitie}</td>
+                            <td className="team-name">{row.thuis}</td>
+                            <td><strong>{row.score ?? "—"}</strong></td>
+                            <td className="team-name">{row.uit}</td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    );
+}
+
 export default function App() {
     const [messages, setMessages] = useState([
         {
@@ -26,11 +90,12 @@ export default function App() {
     const [totalTokens, setTotalTokens] = useState(0);
     const [statusLabel, setStatusLabel] = useState("");
     const [lastSources, setLastSources] = useState([]);
+    const [tableData, setTableData] = useState(null);
     const bottomRef = useRef(null);
 
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, [messages]);
+    }, [messages, tableData]);
 
     async function sendMessage() {
         const trimmed = input.trim();
@@ -41,6 +106,7 @@ export default function App() {
         setLoading(true);
         setStatusLabel("");
         setLastSources([]);
+        setTableData(null);
 
         setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
@@ -69,6 +135,7 @@ export default function App() {
                     if (json.toolUsed) {
                         setStatusLabel(TOOL_LABELS[json.toolUsed] ?? json.toolUsed);
                         if (json.sources) setLastSources(json.sources);
+                        if (json.tableData) setTableData(json.tableData);
                     }
 
                     if (json.token) {
@@ -109,6 +176,7 @@ export default function App() {
         }]);
         setTotalTokens(0);
         setLastSources([]);
+        setTableData(null);
     }
 
     function handleKeyDown(e) {
@@ -156,6 +224,19 @@ export default function App() {
                         <div className="bubble assistant status">
                             <span className="status-dot" />
                             {statusLabel}
+                        </div>
+                    </div>
+                )}
+
+                {tableData && !loading && (
+                    <div className="bubble-wrapper assistant">
+                        <div className="bubble assistant table-bubble">
+                            {tableData.type === "getStandings" && (
+                                <StandingsTable rows={tableData.rows} />
+                            )}
+                            {(tableData.type === "getRecentMatches" || tableData.type === "getUpcomingMatches") && (
+                                <MatchesTable rows={tableData.rows} />
+                            )}
                         </div>
                     </div>
                 )}

@@ -1,6 +1,5 @@
 const BASE_URL = "https://api.football-data.org/v4";
 
-
 async function footballFetch(endpoint) {
     const response = await fetch(`${BASE_URL}${endpoint}`, {
         headers: {
@@ -8,7 +7,6 @@ async function footballFetch(endpoint) {
         },
     });
 
-    // Rate limit check zoals de API aanbeveelt
     const remaining = response.headers.get("X-Requests-Available-Minute");
     if (remaining && parseInt(remaining) < 3) {
         console.warn(`[rate-limit] Nog maar ${remaining} requests beschikbaar deze minuut`);
@@ -22,12 +20,12 @@ async function footballFetch(endpoint) {
     return response.json();
 }
 
-// Tool 1: Haal de stand op van een competitie
+// Tool 1: Haal de stand op van een competitie (seizoen 2024)
 export async function getStandings(competitionCode) {
-    const data = await footballFetch(`/competitions/${competitionCode}/standings`);
+    const data = await footballFetch(`/competitions/${competitionCode}/standings?season=2025`);
     const table = data.standings.find(s => s.type === "TOTAL")?.table ?? [];
 
-    return table.slice(0, 10).map(entry => ({
+ return table.map(entry => ({
         positie: entry.position,
         team: entry.team.name,
         gespeeld: entry.playedGames,
@@ -67,3 +65,19 @@ export async function getUpcomingMatches(teamId, limit = 5) {
         uit: m.awayTeam.name,
     }));
 }
+
+export const TEAM_IDS = {
+    "liverpool": 64,
+    "manchester city": 65,
+    "arsenal": 57,
+    "chelsea": 61,
+    "manchester united": 66,
+    "ajax": 678,
+    "psv": 674,
+    "feyenoord": 675,
+    "barcelona": 81,
+    "real madrid": 86,
+    "atletico madrid": 78,
+    "bayern münchen": 5,
+    "borussia dortmund": 4,
+};
